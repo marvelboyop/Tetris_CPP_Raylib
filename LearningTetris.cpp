@@ -11,125 +11,40 @@ const int gridRows = 16;
 const int screen_width = 882;
 const int screen_height = cellSize * gridRows; // 832
 
-int board[gridRows][gridCols] = {0};
+Color board[gridRows][gridCols] = {BLANK};
 
-// class shape
-// {
-// public:
-//     // Position on the GRID (not pixels)
-//     int posX;
-//     int posY;
-
-//     float fallTimer = 0.0f;
-//     float fallDelay = 0.5f; // seconds per cell
-
-//     int gridByGrid;
-//     bool isLocked = false;
-
-//     int twoByTwoMatrix[2][2];
-
-//     int threeByThreeMatrix[3][3];
-
-//     int fourByFourMatrix[4][4];
-
-//     void Draw()
-//     {
-//         for (int row = 0; row < gridByGrid; row++)
-//         {
-//             for (int col = 0; col < gridByGrid; col++)
-//             {
-//                 if (gridByGrid == 2)
-//                 {
-//                     if (twoByTwoMatrix[row][col] == 1)
-//                     {
-//                         DrawRectangle(
-//                             (posX + col) * cellSize,
-//                             (posY + row) * cellSize,
-//                             cellSize,
-//                             cellSize,
-//                             RED);
-//                     }
-//                 }
-//                 else if (gridByGrid == 3)
-//                 {
-//                     if (threeByThreeMatrix[row][col] == 1)
-//                     {
-//                         DrawRectangle(
-//                             (posX + col) * cellSize,
-//                             (posY + row) * cellSize,
-//                             cellSize,
-//                             cellSize,
-//                             RED);
-//                     }
-//                 }
-//                 else if (gridByGrid == 4)
-//                 {
-//                     if (fourByFourMatrix[row][col] == 1)
-//                     {
-//                         DrawRectangle(
-//                             (posX + col) * cellSize,
-//                             (posY + row) * cellSize,
-//                             cellSize,
-//                             cellSize,
-//                             RED);
-//                     }
-//                 }
-//             }
-//         }
-//     }
-
-//     void Update()
-//     {
-//         // ---------- Gravity ----------
-//         if (!isLocked)
-//         {
-//             fallTimer += GetFrameTime();
-//             if (fallTimer >= fallDelay)
-//             {
-//                 if (posY < gridRows - gridByGrid)
-//                 {
-//                     posY++;
-//                 }
-//                 else
-//                 {
-//                     isLocked = true; // LANDING
-//                 }
-//                 fallTimer = 0.0f;
-//             }
-
-//             // ---------- Horizontal movement ----------
-//             if (IsKeyPressed(KEY_LEFT) || IsKeyPressed(KEY_A))
-//                 posX--;
-
-//             if (IsKeyPressed(KEY_RIGHT) || IsKeyPressed(KEY_D))
-//                 posX++;
-//         }
-//     }
-
-//     void LimitMovement()
-//     {
-//         // Left wall
-//         if (posX < 0)
-//             posX = 0;
-
-//         // Right wall (square is 2 cells wide)
-//         if (posX > gridCols - gridByGrid)
-//             posX = gridCols - gridByGrid;
-//     }
-// };
+void DrawBoard()
+{
+    for (int r = 0; r < gridRows; r++)
+    {
+        for (int c = 0; c < gridCols; c++)
+        {
+            if (board[r][c].a != 0) // not BLANK
+            {
+                DrawRectangle(
+                    c * cellSize,
+                    r * cellSize,
+                    cellSize,
+                    cellSize,
+                    board[r][c]);
+            }
+        }
+    }
+}
 
 class Shape
 {
 public:
-    int matrix[4][4]; // ONE matrix (max size)
+    int matrix[4][4]; // max size
     int size;         // 2, 3, or 4
 
     int posX, posY;
     float fallTimer = 0.0f;
     float fallDelay = 0.5f;
     bool isLocked = false;
+    Color color;
 
-    Shape(int s) : size(s)
+    Shape(int s, Color c) : size(s), color(c)
     {
         posX = gridCols / 2 - 1;
         posY = 0;
@@ -140,6 +55,7 @@ public:
                 matrix[i][j] = 0;
     }
 
+    // ---------- DRAW ----------
     void Draw()
     {
         for (int r = 0; r < size; r++)
@@ -153,10 +69,194 @@ public:
                         (posY + r) * cellSize,
                         cellSize,
                         cellSize,
-                        RED);
+                        color);
                 }
             }
         }
+    }
+
+    // ---------- UPDATE ----------
+    void Update()
+    {
+        if (isLocked)
+            return;
+
+        // Gravity
+        fallTimer += GetFrameTime();
+        if (fallTimer >= fallDelay)
+        {
+            fallTimer += GetFrameTime();
+
+            if (fallTimer >= fallDelay)
+            {
+                if (CanMoveDown())
+                {
+                    posY++;
+                }
+                else
+                {
+                    LockToBoard();
+                    isLocked = true;
+                }
+                fallTimer = 0.0f;
+            }
+        }
+
+        // Horizontal movement
+        if (IsKeyPressed(KEY_LEFT) || IsKeyPressed(KEY_A))
+        {
+            if (CanMoveLeft())
+                posX--;
+        }
+
+        if (IsKeyPressed(KEY_RIGHT) || IsKeyPressed(KEY_D))
+        {
+            if (CanMoveRight())
+                posX++;
+        }
+
+        // rotation
+        if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W))
+        {
+            Rotate();
+        }
+    }
+
+    //============================== Can Move Right?? ==============================
+    bool CanMoveRight()
+    {
+        for (int r = 0; r < size; r++)
+        {
+            for (int c = 0; c < size; c++)
+            {
+                if (matrix[r][c] == 1)
+                {
+                    int nextCol = posX + c + 1;
+
+                    // Hit right wall
+                    if (nextCol >= gridCols)
+                        return false;
+
+                    // Hit another block
+                    if (board[posY + r][nextCol].a != 0)
+                        return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    // ============================== Can Move Left ?? ===============================
+    bool CanMoveLeft()
+    {
+        for (int r = 0; r < size; r++)
+        {
+            for (int c = 0; c < size; c++)
+            {
+                if (matrix[r][c] == 1)
+                {
+                    int nextCol = posX + c - 1;
+
+                    // Hit left wall
+                    if (nextCol < 0)
+                        return false;
+
+                    // Hit another block
+                    if (board[posY + r][nextCol].a != 0)
+                        return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    //======================= rotate =============================
+    void Rotate()
+    {
+        int temp[4][4] = {0};
+
+        // Rotate clockwise
+        for (int r = 0; r < size; r++)
+        {
+            for (int c = 0; c < size; c++)
+            {
+                temp[c][size - 1 - r] = matrix[r][c];
+            }
+        }
+
+        // Check if rotation is valid
+        if (CanRotate(temp))
+        {
+            // Apply rotation
+            for (int r = 0; r < size; r++)
+                for (int c = 0; c < size; c++)
+                    matrix[r][c] = temp[r][c];
+        }
+    }
+
+    // ========================= Can Rotate?? ======================
+    bool CanRotate(int temp[4][4])
+    {
+        for (int r = 0; r < size; r++)
+        {
+            for (int c = 0; c < size; c++)
+            {
+                if (temp[r][c] == 1)
+                {
+                    int boardX = posX + c;
+                    int boardY = posY + r;
+
+                    // Out of bounds
+                    if (boardX < 0 || boardX >= gridCols ||
+                        boardY < 0 || boardY >= gridRows)
+                        return false;
+
+                    // Hit locked block
+                    if (board[boardY][boardX].a != 0)
+                        return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    // Draw the shape to board when it touches the ground
+    void LockToBoard()
+    {
+        for (int r = 0; r < size; r++)
+        {
+            for (int c = 0; c < size; c++)
+            {
+                if (matrix[r][c] == 1)
+                {
+                    board[posY + r][posX + c] = color;
+                }
+            }
+        }
+    }
+
+    //======================== Can Move Down ??? =============================
+    bool CanMoveDown()
+    {
+        for (int r = 0; r < size; r++)
+        {
+            for (int c = 0; c < size; c++)
+            {
+                if (matrix[r][c] == 1)
+                {
+                    int nextRow = posY + r + 1;
+
+                    // Hit bottom of grid
+                    if (nextRow >= gridRows)
+                        return false;
+
+                    // (Later) hit another block
+                    if (board[nextRow][posX + c].a != 0)
+                        return false;
+                }
+            }
+        }
+        return true;
     }
 };
 
@@ -164,7 +264,7 @@ public:
 class Square : public Shape
 {
 public:
-    Square() : Shape(2)
+    Square() : Shape(2, BLUE)
     {
         matrix[0][0] = 1;
         matrix[0][1] = 1;
@@ -173,17 +273,16 @@ public:
     }
 };
 
-//======================================== Plus =================================
-class Plus : public Shape
+//======================================== T Shape =================================
+class TShape : public Shape
 {
 public:
-    Plus() : Shape(3)
+    TShape() : Shape(3, GREEN)
     {
         matrix[0][1] = 1;
         matrix[1][0] = 1;
         matrix[1][1] = 1;
         matrix[1][2] = 1;
-        matrix[2][1] = 1;
     }
 };
 
@@ -192,13 +291,12 @@ public:
 class ZShape : public Shape
 {
 public:
-    ZShape() : Shape(3)
+    ZShape() : Shape(3, YELLOW)
     {
         matrix[0][0] = 1;
         matrix[0][1] = 1;
         matrix[1][1] = 1;
-        matrix[2][1] = 1;
-        matrix[2][2] = 1;
+        matrix[1][2] = 1;
     }
 };
 
@@ -206,7 +304,7 @@ public:
 class LShape : public Shape
 {
 public:
-    LShape() : Shape(4)
+    LShape() : Shape(3, ORANGE)
     {
         matrix[0][0] = 1;
         matrix[1][0] = 1;
@@ -216,10 +314,10 @@ public:
 };
 
 // =========================== line ============================================
-class Line : public Shape
+class line : public Shape
 {
 public:
-    Line() : Shape(4)
+    line() : Shape(4, RED)
     {
         matrix[1][0] = 1;
         matrix[1][1] = 1;
@@ -228,11 +326,61 @@ public:
     }
 };
 
+//=========================== S Shape ====================================
+class SShape : public Shape
+{
+public:
+    SShape() : Shape(3, PINK)
+    {
+        matrix[0][1] = 1;
+        matrix[0][2] = 1;
+        matrix[1][0] = 1;
+        matrix[1][1] = 1;
+    }
+};
+
+//========================== J Shape ========================================
+class JShape : public Shape
+{
+public:
+    JShape() : Shape(3, GRAY)
+    {
+        matrix[0][1] = 1;
+        matrix[1][1] = 1;
+        matrix[2][0] = 1;
+        matrix[2][1] = 1;
+    }
+};
+
+// ============================ spawn shape =======================================
+Shape *SpawnShape()
+{
+    int r = GetRandomValue(0, 6);
+    switch (r)
+    {
+    case 0:
+        return new Square();
+    case 1:
+        return new TShape();
+    case 2:
+        return new SShape();
+    case 3:
+        return new ZShape();
+    case 4:
+        return new LShape();
+    case 5:
+        return new JShape();
+    case 6:
+        return new line();
+    }
+    return new Square();
+}
+
 int main()
 {
     InitWindow(screen_width, screen_height, "Tetris made by marvelboyop & Dwip");
     SetTargetFPS(60);
-    Square square;
+    Shape *currentShape = SpawnShape();
 
     while (!WindowShouldClose())
     {
@@ -240,10 +388,18 @@ int main()
         ClearBackground(BLACK);
 
         // Update
-        square.Update();
+        currentShape->Update();
+
+        if (currentShape->isLocked)
+        {
+            delete currentShape;
+            currentShape = SpawnShape();
+        }
 
         // Draw grid
-        square.Draw();
+        DrawBoard();
+        currentShape->Draw();
+
         for (int row = 0; row < gridRows; row++)
         {
             for (int col = 0; col < gridCols; col++)
