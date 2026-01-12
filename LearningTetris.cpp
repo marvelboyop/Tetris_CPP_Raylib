@@ -11,6 +11,8 @@ const int gridRows = 16;
 const int screen_width = 882;
 const int screen_height = cellSize * gridRows; // 832
 
+int static score = 0;
+
 Color board[gridRows][gridCols] = {BLANK};
 
 void DrawBoard()
@@ -75,6 +77,54 @@ public:
         }
     }
 
+    // ======================================= Remove Row ===========================
+    void RemoveRow(int row)
+    {
+        for (int r = row; r > 0; r--)
+        {
+            for (int c = 0; c < gridCols; c++)
+            {
+                board[r][c] = board[r - 1][c];
+            }
+        }
+
+        // Clear the top row
+        for (int c = 0; c < gridCols; c++)
+        {
+            board[0][c] = BLANK;
+        }
+    }
+
+    // ======================================= isRowFull ?? ===========================
+    bool IsRowFull(int row)
+    {
+        for (int c = 0; c < gridCols; c++)
+        {
+            if (board[row][c].a == 0)
+                return false;
+        }
+        return true;
+    }
+    // ============================= scoring/lines cleared =================================
+    int linesClearedThisTurn = 0;
+
+    void ClearLines()
+    {
+        int linesClearedThisTurn = 0;
+
+        for (int r = gridRows - 1; r >= 0; r--)
+        {
+            if (IsRowFull(r))
+            {
+                RemoveRow(r);
+                linesClearedThisTurn++;
+                r++; // recheck same row
+            }
+        }
+
+        score += linesClearedThisTurn * linesClearedThisTurn * 100;
+    }
+
     // ---------- UPDATE ----------
     void Update()
     {
@@ -96,6 +146,7 @@ public:
                 else
                 {
                     LockToBoard();
+                    ClearLines();
                     isLocked = true;
                 }
                 fallTimer = 0.0f;
@@ -376,30 +427,53 @@ Shape *SpawnShape()
     return new Square();
 }
 
+// ============================== Draw Next Shape ==================================
+void DrawNextShape(Shape *shape, int startX, int startY)
+{
+    for (int r = 0; r < shape->size; r++)
+    {
+        for (int c = 0; c < shape->size; c++)
+        {
+            if (shape->matrix[r][c] == 1)
+            {
+                DrawRectangle(
+                    startX + c * cellSize,
+                    startY + r * cellSize,
+                    cellSize,
+                    cellSize,
+                    shape->color);
+            }
+        }
+    }
+}
+
 int main()
 {
     InitWindow(screen_width, screen_height, "Tetris made by marvelboyop & Dwip");
     SetTargetFPS(60);
+
     Shape *currentShape = SpawnShape();
+    Shape *nextShape = SpawnShape();
 
     while (!WindowShouldClose())
     {
-        BeginDrawing();
-        ClearBackground(BLACK);
-
         // Update
         currentShape->Update();
 
         if (currentShape->isLocked)
         {
             delete currentShape;
-            currentShape = SpawnShape();
+            currentShape = nextShape;
+            nextShape = SpawnShape();
         }
 
-        // Draw grid
+        BeginDrawing();
+        ClearBackground(BLACK);
+
         DrawBoard();
         currentShape->Draw();
 
+        // Grid by drawing lines
         for (int row = 0; row < gridRows; row++)
         {
             for (int col = 0; col < gridCols; col++)
@@ -412,6 +486,34 @@ int main()
                     WHITE);
             }
         }
+
+        int PrintInfoX = gridCols * cellSize + 120;
+        DrawText("SCORE", PrintInfoX, 60, 40, WHITE);
+        DrawText(TextFormat("%d", score), PrintInfoX, 120, 40, YELLOW);
+
+        DrawText("NEXT", PrintInfoX, 320, 40, WHITE);
+        DrawNextShape(nextShape, PrintInfoX - 20, 400);
+        // Draw grid lines ONLY around preview area
+        for (int r = 0; r <= nextShape->size; r++)
+        {
+            DrawLine(
+                PrintInfoX - 20,
+                400 + r * cellSize,
+                PrintInfoX - 20 + nextShape->size * cellSize,
+                400 + r * cellSize,
+                WHITE);
+        }
+
+        for (int c = 0; c <= nextShape->size; c++)
+        {
+            DrawLine(
+                PrintInfoX - 20 + c * cellSize,
+                400,
+                PrintInfoX - 20 + c * cellSize,
+                400 + nextShape->size * cellSize,
+                WHITE);
+        }
+
         EndDrawing();
     }
 
