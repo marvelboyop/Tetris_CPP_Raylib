@@ -1,5 +1,8 @@
 #include <iostream>
 #include <raylib.h>
+#include <vector>
+#include <random>
+#include <algorithm>
 
 using namespace std;
 
@@ -12,6 +15,10 @@ const int screen_width = 882;
 const int screen_height = cellSize * gridRows; // 832
 
 int static score = 0;
+bool gameOver = false;
+
+vector<int> bag;
+mt19937 rng(random_device{}()); // RNG = Random Number Generator
 
 Color board[gridRows][gridCols] = {BLANK};
 
@@ -37,12 +44,15 @@ void DrawBoard()
 class Shape
 {
 public:
-    int matrix[4][4]; // max size
+    int matrix[4][4]; // max size of the Tetromino shapes
     int size;         // 2, 3, or 4
 
     int posX, posY;
     float fallTimer = 0.0f;
-    float fallDelay = 0.5f;
+    float fallDelay = 0.5f; // for storing the current fall delay
+    float normalFallDelay = 0.5f;
+    float softDropDelay = 0.05f;
+
     bool isLocked = false;
     Color color;
 
@@ -130,6 +140,12 @@ public:
     {
         if (isLocked)
             return;
+
+        // -------- Soft Drop --------
+        if (IsKeyDown(KEY_DOWN) || IsKeyDown(KEY_S))
+            fallDelay = softDropDelay;
+        else
+            fallDelay = normalFallDelay;
 
         // Gravity
         fallTimer += GetFrameTime();
@@ -404,10 +420,9 @@ public:
 };
 
 // ============================ spawn shape =======================================
-Shape *SpawnShape()
+Shape *CreateShape(int type)
 {
-    int r = GetRandomValue(0, 6);
-    switch (r)
+    switch (type)
     {
     case 0:
         return new Square();
@@ -425,6 +440,22 @@ Shape *SpawnShape()
         return new line();
     }
     return new Square();
+}
+void RefillBag()
+{
+    bag = {0, 1, 2, 3, 4, 5, 6};
+    shuffle(bag.begin(), bag.end(), rng);
+}
+
+Shape *SpawnShape()
+{
+    if (bag.empty())
+        RefillBag();
+
+    int type = bag.back();
+    bag.pop_back();
+
+    return CreateShape(type);
 }
 
 // ============================== Draw Next Shape ==================================
@@ -447,6 +478,32 @@ void DrawNextShape(Shape *shape, int startX, int startY)
     }
 }
 
+//============================ CanSpawn ===============================
+bool CanSpawn(Shape *shape)
+{
+    for (int r = 0; r < shape->size; r++)
+    {
+        for (int c = 0; c < shape->size; c++)
+        {
+            if (shape->matrix[r][c] == 1)
+            {
+                int boardX = shape->posX + c;
+                int boardY = shape->posY + r;
+
+                // Outside board (should not happen, but safe)
+                if (boardY < 0 || boardY >= gridRows ||
+                    boardX < 0 || boardX >= gridCols)
+                    return false;
+
+                // Collision with existing block
+                if (board[boardY][boardX].a != 0)
+                    return false;
+            }
+        }
+    }
+    return true;
+}
+
 int main()
 {
     InitWindow(screen_width, screen_height, "Tetris made by marvelboyop & Dwip");
@@ -458,13 +515,19 @@ int main()
     while (!WindowShouldClose())
     {
         // Update
-        currentShape->Update();
-
-        if (currentShape->isLocked)
+        if (!gameOver)
         {
-            delete currentShape;
-            currentShape = nextShape;
-            nextShape = SpawnShape();
+            currentShape->Update();
+
+            if (currentShape->isLocked)
+            {
+                delete currentShape;
+                currentShape = nextShape;
+                nextShape = SpawnShape();
+
+                if (!CanSpawn(currentShape))
+                    gameOver = true;
+            }
         }
 
         BeginDrawing();
@@ -513,6 +576,18 @@ int main()
                 400 + nextShape->size * cellSize,
                 WHITE);
         }
+        if (gameOver)
+        {
+            DrawText(
+                "GAME OVER",
+                gridCols * cellSize / 2 - 140 - 45,
+                screen_height / 2 - 20,
+                60,
+                GOLD);
+        }
+        DrawText("marvelboyop", 620, 709, 28, GOLD);
+        DrawText("&", 695, 744, 28, GOLD);
+        DrawText("Dwip", 675, 777, 28, GOLD);
 
         EndDrawing();
     }
